@@ -1,4 +1,4 @@
-Program: sqtl (selection quantitative trait locus mapping)
+`Program: sqtl (selection quantitative trait locus mapping)
 Version: 0.1
 Contact: Leopold Parts <leopold.parts@gmail.com>
 
@@ -15,3 +15,4 @@ Command:
                 plot_genome     Plot genome-wide allele frequencies
                 plot_chrms      Plot allele frequencies separately for each chromosome
                 plot_qtls       Plot allele frequencies at QTLs
+`
