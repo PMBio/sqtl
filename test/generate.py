@@ -3,7 +3,6 @@ import scipy as SP
 import scipy.stats as ST
 import pylab as PL
 import pdb
-from sqtl.model.basic import *
 from sqtl.model.infer import *
 from sqtl.tools.common import *
 N_eff = 1E7
