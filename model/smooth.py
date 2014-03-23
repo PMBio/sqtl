@@ -28,15 +28,15 @@ STR_HEADER_SMOOTH = """#sQTL version %s. smooth samples
 def filter_nearby(locs, l, length_cutoff, nearby_snp_cutoff, bad):
     # 1. find all loci that are no more than cutoff away
     start, end = l, l
-    while start >= 0 and abs(locs[l] - locs[start]) < length_cutoff: start -= 1
+    while start > 0 and abs(locs[l] - locs[start]) < length_cutoff: start -= 1
     while end < len(locs) and abs(locs[l] - locs[end]) < length_cutoff: end += 1
 
     # 2. Filter to retain only good ones that are
     last = start
     while last < len(locs) and bad[last]: last += 1 # start off with at least one good site
-    res = []    
+    res = [last]
     for i in range(last+1, end):
-        if ((locs[i] - locs[last]) > nearby_snp_cutoff) and (~bad[i]):
+        if ((locs[i] - locs[last]) >= nearby_snp_cutoff) and (~bad[i]):
             last = i
             res.append(i)
 

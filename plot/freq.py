@@ -1,5 +1,4 @@
 import pylab as PL
-from sqtl.paper.simulation.generate import *
 
 def plot_inferred(models, model_names, sim, step=0.02, name=None, title=None, X_logscale=False, qtl_loci=None):
     PL.figure()

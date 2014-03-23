@@ -4,8 +4,7 @@ import scipy as SP
 from leo.common import *
 from generate import *
 from sqtl.model.infer import *
-from sqtl.model.infer_local import *
-from sqtl.model.model_dataonly import *
+from sqtl.model.smooth import *
 from sqtl.plot.freq import *
 DATA_DIR = '/home/morphology/shared/lparts/data/projects/sqtl'
 if os.popen("hostname").next().strip() == 'can1.local': DATA_DIR = "/Users/leopold/data/projects/sqtl"
@@ -34,39 +33,23 @@ def get_simulation(seed, config_file, coverage, qtl_af):
     return sim
 
 
-def get_models(sim, rho_mode="fixed", debug=False):
-    models, qtl_loci = {}, None
-    if debug: qtl_loci = [1,176,187]
-    if rho_mode == "fixed":
-        #pdb.set_trace()
-        models['MP'] = cSQtlModelMP(D=sim.D, rho_basemean=sim.r_mean*sim.r_mean_infl, rho_basevar=sim.r_var*sim.r_var_infl, F0=sim.F0, calc_all_afs=False)
-        models['sQTL'] = cSQtlModel(D=sim.D, rho_basemean=sim.r_mean*sim.r_mean_infl, rho_basevar=sim.r_var*sim.r_var_infl, F0=sim.F0, calc_all_afs=False)
-    elif rho_mode == "truth":
-        models['MP'] = cSQtlModelMP(D=sim.D, rho_basemean=sim.r_mean*sim.r_mean_infl, rho_basevar=sim.r_var*sim.r_var_infl, F0=sim.F0, calc_all_afs=False, rho=sim.R)
-        models['sQTL'] = cSQtlModel(D=sim.D, rho_basemean=sim.r_mean*sim.r_mean_infl, rho_basevar=sim.r_var*sim.r_var_infl, F0=sim.F0, calc_all_afs=False, rho=sim.R)
-    models['Smooth'] = cDataOnlyModel(D=sim.D, rho_basemean=sim.r_mean*sim.r_mean_infl, rho_basevar=sim.r_var*sim.r_var_infl, F0=sim.F0)
-    models['ML'] = cMLModel(sim.D, sim.F0)
-    for m in models:
-        if m != "sQTL":
-            models[m].infer()
-    return models
-
-
-def calculate_stats(sim, models):
-    result_f = {}
-    result_q = {}
-    result_l = {}
-
-    for m in models:
-        qhat = models[m].X.E1.argmax()
-        if m in ("sQTL", "MP"):
-            result_f[m] = (abs(models[m].F.E1[qhat] - sim.F1)).mean()
-        else:
-            result_f[m] = (abs(models[m].F.E1 - sim.F1)).mean()
+def get_models(sim):
+    smooth_F1 = smooth(sim.D, range(len(sim.D)), n_rounds=2, rec_rate=sim.r_mean*sim.r_mean_infl, nearby_snp_cutoff=0)[0][1]
+    sqtl = cSQtlModel(D=sim.D, r_init_mean=sim.r_mean*sim.r_mean_infl, r_init_var=sim.r_var*sim.r_var_infl, F0=sim.F0, calc_all_afs=False)
+    sqtl.infer()
+    sqtl_q = sqtl.X.E1.argmax()
+    
+    result_qtl = {'sQTL':sqtl_q, 'ML':abs(sqtl.mu_d - sim.F0).argmax(), 'Smooth':abs(smooth_F1 - sim.F0).argmax()}
+    result_f = {'sQTL': abs(sqtl.F.E1[sqtl_q] - sim.F1).mean(), 'ML':abs(sqtl.mu_d - sim.F1).mean(), 'Smooth':abs(smooth_F1 - sim.F1).mean()}
+    result_r, result_l = {}, {}
+    for model in result_qtl:
+        qhat = result_qtl[model]
         s,e = min(qhat, sim.Qloc), max(qhat, sim.Qloc)
-        result_q[m] = abs(sim.R[s:e].sum()*100.) # distance in cM
-        result_l[m] = qhat - sim.Qloc
-    return result_f, result_q, result_l
+        result_r[model] = abs(sim.R[s:e].sum()*100.) # distance in cM
+        result_l[model] = qhat - sim.Qloc
+        
+    return result_f, result_r, result_l
+
 
 
 def run_simulation(seed, config_file, debug=False, rho_mode="fixed"):
@@ -78,8 +61,7 @@ def run_simulation(seed, config_file, debug=False, rho_mode="fixed"):
     for coverage in coverages:
         for qtl_af in qtl_afs:
             sim = get_simulation(seed, config_file, coverage, qtl_af)
-            models = get_models(sim, rho_mode=rho_mode, debug=debug)
-            model_result = calculate_stats(sim, models)
+            model_result = get_models(sim)
             if debug:
                 print seed, model_result
             #if False:
@@ -95,8 +77,7 @@ def run_simulation(seed, config_file, debug=False, rho_mode="fixed"):
                 PL.plot(range(L),(lX -lX.min())/(abs(lX.min())),'g')
                 PL.plot(range(L),(lX2 -lX2.min())/(abs(lX2.min())),'g--')
                 for l in L4:
-                    PL.plot(range(L),models['sQTL'].F.E1[l],'b')
-                    PL.plot(range(L), models['MP'].F.E1[l], 'b--')
+                    PL.plot(range(L),models['sQTL'].F.E1[l],'b--')
                 PL.plot(range(L), sim.D[:,0]/(sim.D.sum(axis=1)), 'r.',markersize=5)
                 PL.plot(range(L), models['Smooth'].F.E1, 'k--')
                 PL.show()
@@ -122,8 +103,8 @@ def run_simulation(seed, config_file, debug=False, rho_mode="fixed"):
                 pdb.set_trace()
                 pass
             result["cov-%d_af-%.2f"%(coverage,qtl_af)] = model_result
-    if not os.path.exists("%s/sim/seed-%d"%(DATA_DIR, seed)): os.system("mkdir -p %s/sim/seed-%d"%(DATA_DIR, seed))
-    cdm(result, "%s/sim/seed-%d/r-%s_config-%s.pickle"%(DATA_DIR, seed, rho_mode, config_file.split("/")[-1][0:-4]))
+    if not os.path.exists("%s/sim-3/seed-%d"%(DATA_DIR, seed)): os.system("mkdir -p %s/sim-3/seed-%d"%(DATA_DIR, seed))
+    cdm(result, "%s/sim-3/seed-%d/r-%s_config-%s.pickle"%(DATA_DIR, seed, rho_mode, config_file.split("/")[-1][0:-4]))
 
 
 def main():
