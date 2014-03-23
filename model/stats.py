@@ -1,19 +1,6 @@
 import scipy as SP
 
 
-def calc_qtlside_estimates_rnode(net, l1, l2):
-    net.R.gm[l1,l2] = get_gmean(net.R.rm[l1,l2], net.R.rvar[l1,l2], net.F0[l1] + net.F0[l2] - 2*net.F0[l1]*net.F0[l2], n_bins=200)
-    net.R.gvar[l1,l2] = get_gvar(net.R.rm[l1,l2], net.R.rvar[l1,l2], net.F0[l1] + net.F0[l2] - 2*net.F0[l1]*net.F0[l2], net.R.gm[l1,l2],n_bins=200)
-    a, b = 2.*net.F0[l1]*(1 - net.F0[l1]), 0
-    c,d  = -2.*net.F0[l1]*(1 - net.F0[l1])*net.F0[l2], net.F0[l1]
-    net.alpha[0,0,l1,l2] = a*net.R.gm[l1,l2] + b # alpha[0, :, l1, l2] = coefficients for estimating f if QTL is towards l2 compared to l1 from l1
-    net.alpha[0,1,l1,l2] = c*net.R.gm[l1,l2] + d
-    net.alphavar[0,0,l1,l2] = (a**2)*(net.R.gvar[l1,l2] + net.R.gm[l1,l2]**2) + b**2
-    net.alphavar[0,1,l1,l2] = (a**2)*net.R.gvar[l1,l2]
-    net.alphavar[0,2,l1,l2] = 2*a*c*net.R.gvar[l1,l2]
-    net.alphavar[0,3,l1,l2] = net.R.gvar[l1,l2]*(c**2)
-
-
 def get_gvar(rm,rv, a, gm, min_var=1E-4, n_bins=20):
     gamma_b = rm/(rv + 1e-20)
     gamma_a = gamma_b*rm
@@ -67,7 +54,6 @@ def region_cumnorm_dist(start, end, m, s):
     return cumnorm_dist(end,m,s) - cumnorm_dist(start,m,s)
 
 
-
 """ Calculate log(y1+y2+y3) given x1=log(y1), x2=log(y2), ...; using
 log(y1+y2+y3) = log(exp(log(y1)) + exp(log(y2)) + ...) = m + log(exp(x1)/exp(m) + exp(x2)/exp(m) + ...) = m + log(exp(x1 - m) + exp(x2 - m) + ...)
 """
@@ -97,7 +83,6 @@ def approx_int(f, start, stop, delta, f_logscale=False, result_logscale=False):
         result += (2.*f(xrangemid)*delta/3.).sum()
         result += delta*(f(start) + f(stop))/6.
     return result
-
 
 
 def cumnorm_dist(x,m,v):

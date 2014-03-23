@@ -19,11 +19,25 @@ class cFNode:
 
     def get_neighbour_estimate(self, net, f_mean, f_var, l1, l2, qtl_l2, q):
         if (not qtl_l2) and SP.isnan(net.alpha[qtl_l2, 0, l1, l2]):
-            calc_qtlside_estimates_rnode(net, l1, l2)
+            self.calc_qtlside_estimate(net, l1, l2)
         est_mean = net.alpha[qtl_l2, 0, l1, l2]*f_mean +  net.alpha[qtl_l2, 1, l1, l2]# l1 - locus we are looking at now, estimating frequency from l2
         est_var = f_var*net.alphavar[qtl_l2,0,l1,l2] + f_mean*f_mean*net.alphavar[qtl_l2,1,l1,l2] + f_mean*net.alphavar[qtl_l2,2,l1,l2] + net.alphavar[qtl_l2, 3,l1,l2] 
         #if (not qtl_l2) and (f_mean - net.F0[l2] > est_mean - net.F0[l1]): pdb.set_trace() 
         return est_mean, est_var
+
+
+    def calc_qtlside_estimate(self, net, l1, l2):
+        net.R.gm[l1,l2] = get_gmean(net.R.rm[l1,l2], net.R.rvar[l1,l2], net.F0[l1] + net.F0[l2] - 2*net.F0[l1]*net.F0[l2], n_bins=200)
+        net.R.gvar[l1,l2] = get_gvar(net.R.rm[l1,l2], net.R.rvar[l1,l2], net.F0[l1] + net.F0[l2] - 2*net.F0[l1]*net.F0[l2], net.R.gm[l1,l2],n_bins=200)
+        a, b = 2.*net.F0[l1]*(1 - net.F0[l1]), 0
+        c,d  = -2.*net.F0[l1]*(1 - net.F0[l1])*net.F0[l2], net.F0[l1]
+        net.alpha[0,0,l1,l2] = a*net.R.gm[l1,l2] + b # alpha[0, :, l1, l2] = coefficients for estimating f if QTL is towards l2 compared to l1 from l1
+        net.alpha[0,1,l1,l2] = c*net.R.gm[l1,l2] + d
+        net.alphavar[0,0,l1,l2] = (a**2)*(net.R.gvar[l1,l2] + net.R.gm[l1,l2]**2) + b**2
+        net.alphavar[0,1,l1,l2] = (a**2)*net.R.gvar[l1,l2]
+        net.alphavar[0,2,l1,l2] = 2*a*c*net.R.gvar[l1,l2]
+        net.alphavar[0,3,l1,l2] = net.R.gvar[l1,l2]*(c**2)
+
 
     def update(self, net, debug=False):
         t0 = time.time()
@@ -91,7 +105,7 @@ class cRNode:
     """ Calculate required moments for genetic map """
     def update_estimates(self, r_basemean, r_basevar):
         LOG.debug("Calculating rho expectations - basemean=%.2e"%(r_basemean))
-        self.r_basemean, self.r_basevar = r_basemean, r_basevar  # base total rates and variance. Assume Poisson variance (= mean)
+        self.r_init, self.r_basemean, self.r_basevar = r_basemean, r_basemean, r_basevar  # base total rates and variance. Assume Poisson variance (= mean)
         b = self.r_basemean/(self.r_basevar + 1e-20) # Gamma distribution parameters
         a = b*self.r_basemean
         self.rm = self.dist*self.r_basemean # raw event rate between loci
@@ -117,7 +131,9 @@ class cRNode:
             d = 0.5*(F0[l1] - F0[l2])/(1 - F0[l2])
             rhos[l-1] = (F1[l1] - b*F1[l2] - d)/(a*F1[l2] + c)
         self.r_basemean = rhos.mean()
-        if self.r_basemean < 0: pdb.set_trace()
+        if self.r_basemean < 0:
+            if debug:  pdb.set_trace()
+            else: self.r_basemean = self.r_init
         self.update_estimates(self.r_basemean, self.r_basemean/100.) # assume low variance in recombination rate - alternative is bad
 
 

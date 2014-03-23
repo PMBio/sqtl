@@ -1,4 +1,5 @@
 import pylab as PL
+import scipy as SP
 
 def plot_inferred(models, model_names, sim, step=0.02, name=None, title=None, X_logscale=False, qtl_loci=None):
     PL.figure()
@@ -89,5 +90,3 @@ def plot_prediction_fromlocus(model, F1, l, q):
     PL.plot(range(L), F1, "k--")
     PL.plot(range(L), res, "b.")
     PL.show()
-    
-                    
