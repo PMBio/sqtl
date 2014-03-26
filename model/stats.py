@@ -85,6 +85,12 @@ def approx_int(f, start, stop, delta, f_logscale=False, result_logscale=False):
     return result
 
 
+def norm_dist(x,m,s):
+    return SP.exp(log_norm_dist(x,m,s))
+
+def log_norm_dist(x,m,s):
+    return -0.5*(SP.log(2*SP.pi) + SP.log(s) + ((x-m)**2)/s)
+
 def cumnorm_dist(x,m,v):
     flip = False
     s = abs(v)**0.5

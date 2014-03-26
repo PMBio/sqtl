@@ -35,19 +35,21 @@ def get_simulation(seed, config_file, coverage, qtl_af):
 
 def get_models(sim):
     smooth_F1 = smooth(sim.D, range(len(sim.D)), n_rounds=2, rec_rate=sim.r_mean*sim.r_mean_infl, nearby_snp_cutoff=0)[0][1]
-    sqtl = cSQtlModel(D=sim.D, r_init_mean=sim.r_mean*sim.r_mean_infl, r_init_var=sim.r_var*sim.r_var_infl, F0=sim.F0, calc_all_afs=False)
-    sqtl.infer()
-    sqtl_q = sqtl.X.E1.argmax()
+    sqtl0 = cSQtlModel(D=sim.D, r_init_mean=sim.r_mean*sim.r_mean_infl, r_init_var=sim.r_var*sim.r_var_infl, F0=sim.F0, calc_all_afs=False, init_from_smoothed=False)
+    sqtl1 = cSQtlModel(D=sim.D, r_init_mean=sim.r_mean*sim.r_mean_infl, r_init_var=sim.r_var*sim.r_var_infl, F0=sim.F0, calc_all_afs=False, F1_init=smooth_F1)
+    sqtl0.infer()
+    sqtl1.infer()
+    sqtl_q0 = sqtl0.X.E1.argmax()
+    sqtl_q1 = sqtl1.X.E1.argmax()
     
-    result_qtl = {'sQTL':sqtl_q, 'ML':abs(sqtl.mu_d - sim.F0).argmax(), 'Smooth':abs(smooth_F1 - sim.F0).argmax()}
-    result_f = {'sQTL': abs(sqtl.F.E1[sqtl_q] - sim.F1).mean(), 'ML':abs(sqtl.mu_d - sim.F1).mean(), 'Smooth':abs(smooth_F1 - sim.F1).mean()}
+    result_qtl = {'sQTL0':sqtl_q0, 'sQTL1':sqtl_q1, 'ML':abs(sqtl0.mu_d - sim.F0).argmax(), 'Smooth':abs(smooth_F1 - sim.F0).argmax()}
+    result_f = {'sQTL0': abs(sqtl0.F.E1[sqtl_q0] - sim.F1).mean(), 'sQTL1': abs(sqtl1.F.E1[sqtl_q1] - sim.F1).mean(), 'ML':abs(sqtl0.mu_d - sim.F1).mean(), 'Smooth':abs(smooth_F1 - sim.F1).mean()}
     result_r, result_l = {}, {}
     for model in result_qtl:
         qhat = result_qtl[model]
         s,e = min(qhat, sim.Qloc), max(qhat, sim.Qloc)
         result_r[model] = abs(sim.R[s:e].sum()*100.) # distance in cM
         result_l[model] = qhat - sim.Qloc
-        
     return result_f, result_r, result_l
 
 
@@ -55,7 +57,7 @@ def get_models(sim):
 def run_simulation(seed, config_file, debug=False, rho_mode="fixed"):
     coverages = range(20,200,20) + range(200,1001,100) #range(200,500,50) + range(500,1001,100)
     qtl_afs = [0.7,0.85,0.99]
-    if debug: coverages, qtl_afs = [80], [0.99] # [90000],[0.99]
+    if debug: coverages, qtl_afs = [60], [0.85]#[80], [0.99] # [90000],[0.99]
     result = {}
     
     for coverage in coverages:
