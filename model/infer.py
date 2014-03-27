@@ -61,9 +61,9 @@ class cFNode:
 
             for l in range(net.L):
                 # once all messages left and right computed, form the actual prediction by combining estimates from left, right, and observed data. This can be shortened at expense of readability.
-                m1,t1 = net.mu_d[l], net.tau_d[l]
-                m2,t2 = self.message[PREDICT_FROM_LEFT, q, l]
-                m3,t3 = self.message[PREDICT_FROM_RIGHT, q, l]
+                m1,t1,m2,t2,m3,t3 = net.mu_d[l], net.tau_d[l], 0, 0, 0, 0
+                if l > 0: m2,t2 = self.message[PREDICT_FROM_LEFT, q, l-1]
+                if l < net.L - 1: m3,t3 = self.message[PREDICT_FROM_RIGHT, q, l+1]
                 self.E1[q,l] = (m1*t1+m2*t2+m3*t3)/(t1+t2+t3)
                 self.var[q,l] = 1./(t1+t2+t3)
 
@@ -81,9 +81,10 @@ class cXNode:
 
     def update(self, net, debug=False):
         LOG.debug("Calculating log-likelihoods of QTL location")
-        for q in range(net.L): # correct?
-            tau = 1./(net.F.var[q] + 1./net.tau_d)
-            self.lnX[q] = (-0.5*tau*(net.F.E1[q] - net.mu_d)**2 + 0.5*SP.log(tau)).sum()
+        for q in range(net.L): # correct? Should have entropy of net.F in there
+            mu_f, tau_f = net.F.E1[q], net.F.var[q]
+            tau = 1./(1./tau_f + 1./net.tau_d)
+            self.lnX[q] = (-0.5*tau*(mu_f - net.mu_d)**2 + 0.5*SP.log(tau)).sum()
         self.update_moments()
 
 
@@ -96,6 +97,7 @@ class cRNode:
                 self.dist[l1,l2] = self.dist[l2,l1] = abs(locus_positions[l1] - locus_positions[l2])
         self.rm, self.rvar = SP.zeros([self.L,self.L]), SP.zeros([self.L,self.L])
         self.rhom, self.rhovar = SP.zeros([self.L,self.L]), SP.zeros([self.L,self.L])
+        self.r_init = r_init_mean
         if init_from_smoothed and (F1_init is not None):
             self.update(F0, F1_init, abs(F1_init - F0).argmax())
         else:
@@ -113,7 +115,6 @@ class cRNode:
         self.rhom = 0.5*(1 - (b/(b + 2*self.dist))**a) # p(g1 = g2) for each pair of loci
         self.rhovar = 0.25*((b/(b + 4*self.dist))**a - (b/(b + 2*self.dist))**(2*a))
         self.gm, self.gvar = SP.zeros(self.rhom.shape)*SP.nan, SP.ones(self.rhom.shape)*SP.nan
-        
         if (self.rhom < 0).any() or (self.rhovar < 0).any():
             LOG.error("average recombination estimates negative. %s %s"%(str(self.rhom), str(self.rhovar)))
             pdb.set_trace()
@@ -130,7 +131,7 @@ class cRNode:
             c = 0.5/(1 - F0[l2])
             d = 0.5*(F0[l1] - F0[l2])/(1 - F0[l2])
             rhos[l-1] = (F1[l1] - b*F1[l2] - d)/(a*F1[l2] + c)
-        self.r_basemean = rhos.mean()
+        self.r_basemean = SP.median(rhos)
         if self.r_basemean < 0:
             if debug:  pdb.set_trace()
             else: self.r_basemean = self.r_init
