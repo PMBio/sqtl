@@ -1,5 +1,6 @@
 #!/usr/bin/python
 import sys
+sys.path.append("../")
 from optparse import OptionParser
 from sqtl.tools.map import *
 from sqtl.tools.call import *
