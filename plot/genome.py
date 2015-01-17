@@ -8,6 +8,8 @@ from sqtl.tools.common import *
 
 PLOT_PARAMS_SCREEN = {'text.fontsize':40, 'xtick.labelsize':24, 'ytick.labelsize':24, 'text.size':40, 'axes.titlesize':30, 'axes.labelsize':26, 'figure.figsize':(16,10), 'legend.fontsize':24}
 PLOT_PARAMS_PAPER = {'text.fontsize':10,'xtick.labelsize':8, 'ytick.labelsize':8, 'text.size':10, 'axes.titlesize':10, 'axes.labelsize':10, 'figure.figsize':(7,6), 'legend.fontsize':10,'backend':'ps'}
+ROMAN = "I II III IV V VI VII VIII IX X XI XII XIII XIV XV XVI Mito MT".split()
+
 PL.rcParams.update(PLOT_PARAMS_PAPER)
 
 def plot_chromosomes(out_dir, data_file, samples, skip_plot_ml=False, extension="png", dpi=300, screen=False):
@@ -48,13 +50,15 @@ def plot_genome(out_file, data_file, samples, dpi=300, screen=False):
 
     PL.figure(None, [14, 4])
     right_end = 0 # rightmost plotted base pair
-    for chrm in sorted(data.values()[0]): # for chromosomes in ascending order
+    for chrm in sort_chrms(data.values()[0]): # for chromosomes in ascending order
         max_site = max(data[samples[0]][chrm]['L']) # length of chromosome
         for s, sample in enumerate(samples): # plot all samples
             I = SP.where(SP.array(data[sample][chrm]['SD']) < 0.3)[0] # at sites that have confident posteriors
             PL.plot(SP.array(data[sample][chrm]['L'])[I] + right_end, SP.array(data[sample][chrm]['AF'])[I], alpha=0.4, color=colors[s], lw=2) # offset by the end of last chromosome
         if right_end > 0: PL.plot([right_end, right_end], [0,1], 'k--', lw=0.4, alpha=0.2) # plot separators between chromosomes
-        right_end = right_end + max(data[sample][chrm]['L']) # update rightmost end
+        new_right = right_end + max(data[sample][chrm]['L'])
+        PL.text(right_end + 0.5*(new_right - right_end), 0.9, str(chrm), horizontalalignment='center')
+        right_end = new_right # update rightmost end
     PL.plot([0,right_end], [0.5,0.5], 'k--', alpha=0.3)
     PL.xlim(0,right_end)
     xrange = SP.arange(0,right_end, 1000000)
@@ -156,6 +160,11 @@ def plot_genes(chrm, start, end, y, h):
     for (x1,x2) in genelocs:
         PL.fill([x1,x2,x2,x1], [y+h, y+h, y-h, y-h], lw=0.5, fill=True, color="k", alpha=0.3)
 
+
+""" Sort chromosomes. If Roman numerals are used, do not rely on alphabetic ordering. """
+def sort_chrms(chrms):
+    if "XII" in chrms: return [c for c in ROMAN if c in chrms]
+    return sorted(chrms)
 
 
 def plot_paper_qtl1():
