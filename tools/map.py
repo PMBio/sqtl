@@ -133,20 +133,9 @@ def create_counts(out_file, pileup_files, base_qual_cutoff=20, map_qual_cutoff=2
     for p,pileup_file in enumerate(pileup_files):
         samples.append(pileup_file.split("/")[-1].split(".")[0])
         pileups.append(read_pileup(pileup_file, base_qual_cutoff=base_qual_cutoff, map_qual_cutoff=map_qual_cutoff))
-        
-    ofh.write(HEADER_COUNT%(SQTL_VERSION, out_file, str(pileup_files), base_qual_cutoff, map_qual_cutoff))
-    ofh.write("#Chrm\tLoc\tRef\tNonref")
-    for p,pileup_file in enumerate(pileup_files):
-        ofh.write("\t%s_ref\t%s_nonref"%(samples[p], samples[p]))
-    ofh.write("\n")
 
-    # 1. combine pileups, output at the union of all loci across samples
     locs, counts, ref = combine_pileups(pileups)
-    for l in range(len(locs)):
-        ofh.write("%s\t%d"%(locs[l]))
-        ofh.write("\t%s\t%s"%(ref[l]))
-        for s in range(len(samples)):
-            ofh.write("\t%d\t%d"%(tuple(counts[s][l])))
-        ofh.write("\n")
-    ofh.close()
+
+    write_counts(out_file, samples, locs, counts, ref, str(pileup_files), base_qual_cutoff, map_qual_cutoff)
+
     LOG.debug("create_counts - Done.")

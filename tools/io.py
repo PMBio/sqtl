@@ -1,12 +1,29 @@
 import os
 import pdb
 import scipy as SP
-#from rapid_qtl_yeast.tools.frequency import *
-#from sqtl.model.stats_helper import *
 from sqtl.tools.common import *
 
 MEAN_GEN_REC_RATE = (66-30)/(5.*1.2E7)
 OUT_DIR = "/Users/leopold/data/projects/sqtl/output"
+
+STR_HEADER_COUNT = """#sQTL version %s - create_counts output
+#=======================================
+# output file=%s
+# input files=%s
+# base quality cutoff=%d
+# mapping quality cutoff=%d
+#
+"""
+
+STR_HEADER_SMOOTH = """#sQTL version %s. smooth samples
+# Samples=%s
+# number of inference rounds=%d
+# recombination rate=%.2e (events/bp)
+# recombination rate cutoff=%.2f
+# nearby SNP cutoff=%d bp (min distance between nearby sites)
+# coverage_cap=%.1f
+# 
+"""
 
 def get_sift(chrm, loci):
     result = SP.zeros(len(loci))
@@ -73,6 +90,10 @@ def get_counts(sample, chrm, start, end):
     return all_chr[I,:]
 
 
+""" Read allele counts from a file.
+@param file_name input file
+@return sample->chrm->{'L':[coordinate]*n, 'seq':[base]*n, 'D':[#ref bases, #nonref bases]*n}
+"""
 def read_counts(file_name):
     res = {} # map of samples->chrms->(locs, seq, data)
     samples = []
@@ -81,7 +102,7 @@ def read_counts(file_name):
         if line[0] == "#": 
             if line[0:4] == "#Chr": # if header
                 samples = [x.replace("_ref","") for x in line.strip().split()[4:-1:2]]
-                res = dict((s,{}) for s in samples)
+                res = {s:{} for s in samples}
         else:
             d = line.strip().split()
             chrm, loc, ref_base, nonref_base = d[0:4]
@@ -120,6 +141,12 @@ def read_posterior(file_name):
     return res
 
 
+""" Write inferred allele frequencies
+@param out_file output file name
+@param header str(file header information)
+@param means [init_mean, posterior_mean, posterior_var, posterior_stats, bad, loc, coverage]
+@param counts sample->chrm->{D,L,seq}
+"""
 def write_posterior(out_file, header, means, counts):
     ofh = file(out_file, 'w')
     ofh.write(header)
@@ -241,6 +268,125 @@ def read_pileup(pileup_file, out_file=None, base_qual_cutoff=20, map_qual_cutoff
 
 
 
+
+def combine_locs(locs):
+    all_locs = set([])
+    for loc in locs: all_locs = all_locs | set(map(tuple, loc)) # union of all locations
+
+    I = [dict((l,-1) for l in all_locs) for loc in locs] # default not present
+    for l, loc in enumerate(locs): # fill in observed sites with their index
+        for i, coord in enumerate(loc): I[l][tuple(coord)] = i
+
+    return sorted(all_locs), I
+
+
+
+""" Combine multiple pileup files; take the union of site locations
+@param out_file output file name
+@param count_files list of input file names
+"""
+def combine_count_files(out_file, count_files):
+    LOG.info("Combining count files: %s into %s"%(str(count_files), out_file))
+    # Read all sample counts into a single map
+    samples, sample_counts = [], {}
+    for f in count_files:
+        for s,c in read_counts(f).items():
+            samples.append(s)
+            sample_counts[s] = c
+
+    # go through all chromosomes, combining sites and information across samples
+    locs, counts, ref = [], [[] for s in samples], []
+    for chrm in sorted(sample_counts[samples[0]]):
+        loc, I = combine_locs([[(chrm, l) for l in sample_counts[s][chrm]['L']] for s in samples])
+        for l in loc: # for each site
+            l_ref = None # reference
+            l_c = SP.zeros([len(samples),2]) # and count at this (l)ocation
+            for s, sample in enumerate(samples): # for each sample
+                i = I[s][l] # get the index into the data
+                if i >= 0: # if site observed 
+                    l_ref = sample_counts[sample][chrm]['seq'][i] # store reference and nonreference bases
+                    l_c[s] = sample_counts[sample][chrm]['D'][i]  # and counts
+            locs.append(l)
+            for s in range(len(samples)): counts[s].append(l_c[s])
+            ref.append(tuple(l_ref))
+    write_counts(out_file, samples, locs, counts, ref, str(count_files), 0, 0)
+    LOG.info("Done combining count files")
+
+
+""" Write allele counts for set of samples to a file
+@param out_file output file name
+@param samples [sample]*S
+@param locs [str(chrm), int(coord)]*L
+@param counts [int(# ref), int(#nonref)]*S*L
+@param ref [str(ref_base), str(nonref_base)]*L
+@param pileup_files_str str(pileup file names counts are derived from)
+@param base_qual_cutoff int(minimum base quality in pileup file for inclusion)
+@param map_qual_cutoff int(minimum mapping quality in pileup file for inclusion)
+"""
+def write_counts(out_file, samples, locs, counts, ref, pileup_files_str, base_qual_cutoff, map_qual_cutoff):
+    # 0. write headers
+    ofh = file(out_file, 'w')
+    ofh.write(STR_HEADER_COUNT%(SQTL_VERSION, out_file, pileup_files_str, base_qual_cutoff, map_qual_cutoff))
+    ofh.write("#Chrm\tLoc\tRef\tNonref")
+    for s in samples: ofh.write("\t%s_ref\t%s_nonref"%(s,s))
+    ofh.write("\n")
+
+    # 1. output data
+    for l in range(len(locs)):
+        ofh.write("%s\t%d"%(locs[l]))
+        ofh.write("\t%s\t%s"%(ref[l]))
+        for s in range(len(samples)):
+            ofh.write("\t%d\t%d"%(tuple(counts[s][l])))
+        ofh.write("\n")
+    ofh.close()
+
+
+""" Combine multiple allele frequency files; take the union of site locations
+@param out_file output file name
+@param af_files list of input file names
+"""
+def combine_af_files(out_file, af_files):
+    LOG.info("Combining allele frequency files: %s into %s"%(str(af_files), out_file))
+    # Read all sample counts into a single map. Keep a counts map as well to retain compatibility with write function. Only int(counts[sample][chrm]['D'][l][0]), int(counts[sample][chrm]['D'][l][1]) is used
+    samples, res, sample_afs, sample_counts = [], {}, {}, {}
+    for f in af_files:
+        for s,c in read_posterior(f).items():
+            samples.append(s)
+            res[s], sample_afs[s], sample_counts[s] = c.copy(),c,c
+                
+    # go through all chromosomes, combining sites and information across samples
+    for chrm in sorted(sample_afs[samples[0]]):
+        for sample in samples: res[sample][chrm] = [[] for i in range(7)]
+        loc, I = combine_locs([[(chrm, l) for l in sample_afs[s][chrm]['L']] for s in samples])
+        for l in loc: # for each site
+            l_ref = None # reference
+            for s, sample in enumerate(samples): # for each sample
+                i = I[s][l] # get the index into the data
+                res[sample][chrm][5].append(int(l[1]))
+                res[sample][chrm][3].append([1,1]) # unused
+                if i >= 0: # if site observed
+                    l_ref = sample_afs[sample][chrm]['seq'][i]
+                    sample_counts[sample][chrm]['D'].append(sample_afs[sample][chrm]['D'][i])
+                    res[sample][chrm][6].append(sum(sample_counts[sample][chrm]['D'][-1])) # coverage
+                    res[sample][chrm][0].append(sample_afs[sample][chrm]['ML'][i])
+                    res[sample][chrm][1].append(sample_afs[sample][chrm]['AF'][i])
+                    res[sample][chrm][2].append(sample_afs[sample][chrm]['SD'][i]**2)
+                    res[sample][chrm][4].append(sample_afs[sample][chrm]['bad'][i])
+                else:
+                    sample_counts[sample][chrm]['D'].append([0,0])
+                    res[sample][chrm][6].append(0)
+                    res[sample][chrm][0].append(SP.nan)
+                    res[sample][chrm][1].append(SP.nan)
+                    res[sample][chrm][2].append(SP.nan)
+                    res[sample][chrm][4].append(True)
+            for sample in samples:
+                sample_counts[sample][chrm]['seq'].append(l_ref)
+    header = STR_HEADER_SMOOTH%(SQTL_VERSION, str(samples), 0, 0, 0, 0, 0)
+    write_posterior(out_file, header, res, sample_counts)
+    LOG.info("Done combining allele frequency files")
+
+
+
 def get_peak_data(chrm, loc, sams=['WA-NA_Initial_R2_F12_T0', 'WA-NA_Heat_R2_F12_T4'], peak_window=1.5E4, gen=12):
     rec_rate=30/1.2E7 + (gen - 1)*MEAN_GEN_REC_RATE
     ds = [get_posterior(sam, chr=chrm, type='uniform', rec=0.9, filter=0.1) for sam in sams]
@@ -264,3 +410,5 @@ def get_peak_data(chrm, loc, sams=['WA-NA_Initial_R2_F12_T0', 'WA-NA_Heat_R2_F12
     rparams = get_gamma_params(r_mean, 0.00001*SP.ones(len(r_mean)))
 
     return dat,  rparams, f0, get_prior(chrm, combined_loci[Iq]), combined_loci[Iq], f1
+
+

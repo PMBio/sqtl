@@ -30,6 +30,9 @@ Command:
 \t\tplot_genome\tPlot genome-wide allele frequencies
 \t\tplot_chrms\tPlot allele frequencies separately for each chromosome
 \t\tplot_qtls\tPlot allele frequencies at QTLs
+
+\t\tcombine_counts\tCombine count files
+\t\tcombine_afs\tCombine allele frequency files
 """%SQTL_VERSION
 
 USAGE_MAP = """Map reads from fastq to a reference genome to produce a sorted merged .bam file.
@@ -144,6 +147,17 @@ Options:
         -s STR    plot with screen parameters instead of publication plot parameters [False]
 """
 
+USAGE_COMBINE_COUNTS = """Combine multiple count files.
+This enables mapping and creating pileup files in parallel before using a single file to call QTLs.
+Usage:
+sqtl combine_counts out_file count_file1 count_file2 [count_file3 [count_file4 [...]]]
+"""
+
+USAGE_COMBINE_AFS = """Combine multiple allele frequency files.
+This enables mapping and creating pileup files in parallel before using a single file to call QTLs.
+Usage:
+sqtl combine_afs out_file af_file1 af_file2 [af_file3 [af_file4 [...]]]
+"""
 
 """Map sequencing reads to the reference for multiple sets of reads """ 
 def sqtl_map():
@@ -289,6 +303,26 @@ def sqtl_plot_qtls():
     plot_qtls(out_dir=args[1], qtl_file=args[2], posterior_file=args[3], samples=args[4:], **(eval(str(opts))))
 
 
+""" Combine counts from multiple files """
+def sqtl_combine_counts():
+    parser = OptionParser(usage=USAGE_COMBINE_COUNTS)
+    opts, args = parser.parse_args()
+    if len(args) < 4:
+        print USAGE_COMBINE_COUNTS
+        return
+    combine_count_files(out_file=args[1], count_files=args[2:])
+
+
+""" Combine allele frequencies from multiple files """
+def sqtl_combine_afs():
+    parser = OptionParser(usage=USAGE_COMBINE_AFS)
+    opts, args = parser.parse_args()
+    if len(args) < 4:
+        print USAGE_COMBINE_AFS
+        return
+    combine_af_files(out_file=args[1], af_files=args[2:])
+
+
 def sqtl_call():
     pass
 
@@ -307,6 +341,8 @@ def main():
     elif sys.argv[1] == "plot_genome": sqtl_plot_genome()
     elif sys.argv[1] == "plot_chrms": sqtl_plot_chromosomes()
     elif sys.argv[1] == "plot_qtls": sqtl_plot_qtls()
+    elif sys.argv[1] == "combine_counts": sqtl_combine_counts()
+    elif sys.argv[1] == "combine_afs": sqtl_combine_afs()
     else:
 	print USAGE_STR
 	return
