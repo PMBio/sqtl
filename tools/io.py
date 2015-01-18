@@ -6,7 +6,7 @@ from sqtl.tools.common import *
 MEAN_GEN_REC_RATE = (66-30)/(5.*1.2E7)
 OUT_DIR = "/Users/leopold/data/projects/sqtl/output"
 
-STR_HEADER_COUNT = """#sQTL version %s - create_counts output
+STR_HEADER_COUNT = """# %s sQTL version %s - create_counts output
 #=======================================
 # output file=%s
 # input files=%s
@@ -15,7 +15,7 @@ STR_HEADER_COUNT = """#sQTL version %s - create_counts output
 #
 """
 
-STR_HEADER_SMOOTH = """#sQTL version %s. smooth samples
+STR_HEADER_SMOOTH = """# %s sQTL version %s. infer output.
 # Samples=%s
 # number of inference rounds=%d
 # recombination rate=%.2e (events/bp)
@@ -326,7 +326,7 @@ def combine_count_files(out_file, count_files):
 def write_counts(out_file, samples, locs, counts, ref, pileup_files_str, base_qual_cutoff, map_qual_cutoff):
     # 0. write headers
     ofh = file(out_file, 'w')
-    ofh.write(STR_HEADER_COUNT%(SQTL_VERSION, out_file, pileup_files_str, base_qual_cutoff, map_qual_cutoff))
+    ofh.write(STR_HEADER_COUNT%(current_time_str(), SQTL_VERSION, out_file, pileup_files_str, base_qual_cutoff, map_qual_cutoff))
     ofh.write("#Chrm\tLoc\tRef\tNonref")
     for s in samples: ofh.write("\t%s_ref\t%s_nonref"%(s,s))
     ofh.write("\n")
@@ -381,7 +381,7 @@ def combine_af_files(out_file, af_files):
                     res[sample][chrm][4].append(True)
             for sample in samples:
                 sample_counts[sample][chrm]['seq'].append(l_ref)
-    header = STR_HEADER_SMOOTH%(SQTL_VERSION, str(samples), 0, 0, 0, 0, 0)
+    header = STR_HEADER_SMOOTH%(current_time_str(), SQTL_VERSION, str(samples), 0, 0, 0, 0, 0)
     write_posterior(out_file, header, res, sample_counts)
     LOG.info("Done combining allele frequency files")
 

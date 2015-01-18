@@ -1,5 +1,5 @@
 `Program: sqtl (selection quantitative trait locus mapping)
-Version: 0.1
+Version: 0.1.3
 Contact: Leopold Parts <leopold.parts@gmail.com>
 
 Usage: sqtl <command> [options]
