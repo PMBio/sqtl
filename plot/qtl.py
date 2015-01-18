@@ -11,13 +11,13 @@ PLOT_PARAMS_SCREEN = {'text.fontsize':40, 'xtick.labelsize':24, 'ytick.labelsize
 PLOT_PARAMS_PAPER = {'text.fontsize':10,'xtick.labelsize':8, 'ytick.labelsize':8, 'text.size':10, 'axes.titlesize':10, 'axes.labelsize':10, 'figure.figsize':(7,6), 'legend.fontsize':10,'backend':'ps'}
 PL.rcParams.update(PLOT_PARAMS_PAPER)
 
-def plot_qtls(out_dir, qtl_file, posterior_file, samples, skip_plot_ml=False, skip_plot_ci=False, annotation_file="", extension=".png", dpi=300, screen=False):
+def plot_qtls(out_dir, qtl_file, posterior_file, samples, skip_plot_ml=False, skip_plot_ci=False, genefile="", extension=".png", dpi=300, screen=False):
     posteriors = read_posterior(posterior_file)
     for qtlset, chrm, peak, start, c_start, c_end, end, length, delta, sd, sds, genes in read_qtls(qtl_file):
-        plot_qtl(posteriors, samples, chrm, int(peak), int(start), int(end), int(c_start), int(c_end), out_dir, skip_plot_ml=skip_plot_ml, skip_plot_ci=skip_plot_ci, extension=extension, dpi=dpi, screen=screen)
+        plot_qtl(posteriors, samples, chrm, int(peak), int(start), int(end), int(c_start), int(c_end), out_dir, skip_plot_ml=skip_plot_ml, skip_plot_ci=skip_plot_ci, extension=extension, dpi=dpi, screen=screen, genefile=genefile)
 
         
-def plot_qtl(posteriors, samples, chrm, peak, start, end, c_start, c_end, out_dir, screen=False, extension="png", dpi=300, skip_plot_ml=False, skip_plot_ci=False):
+def plot_singlepanel_qtl(posteriors, samples, chrm, peak, start, end, c_start, c_end, out_dir, screen=False, extension="png", dpi=300, skip_plot_ml=False, skip_plot_ci=False):
     if screen: PL.rcParams.update(PLOT_PARAMS_SCREEN)
     LOG.info("plot_qtl - out_dir=%s, chrm=%s, start-csctart-peak-cend-end=%d %d %d %d %d, samples=%s, skip_plot_ml=%s, skip_plot_ci=%s, extension=%s, dpi=%d"%(out_dir, chrm, start, c_start, peak, c_end, end, str(samples), str(skip_plot_ml), str(skip_plot_ci), extension, dpi))
     colours = 'bgryck'
@@ -56,13 +56,14 @@ def plot_qtl_af(locs, post, color):
 def plot_qtl_ml(locs, init, color):
     PL.plot(locs, init, ".", markersize=1, alpha=1, color=color)
 
-def plot_qtl_ci(locs, post, sd, color, alpha_multiplier=0.1):
+def plot_qtl_ci(locs, post, sd, color, alpha_multiplier=0.06):
     sd = SP.array(sd)
     x_ci = SP.array(list(locs) + list(locs)[::-1])
     y_ci = SP.array(list(post) + list(post)[::-1])
     sds = SP.array(list(sd) + list(-sd)[::-1])
-    PL.fill(x_ci, y_ci + 2*sds, color, alpha=alpha_multiplier)
-    PL.fill(x_ci, y_ci + 4*sds, color, alpha=2*alpha_multiplier) 
+
+    PL.fill(x_ci, [max(0,y) for y in y_ci + 2*sds], color, alpha=alpha_multiplier)
+    PL.fill(x_ci, [max(0,y) for y in y_ci + 4*sds], color, alpha=2*alpha_multiplier) 
 
 
 def plot_posterior_diff(locs, means, sds, color, plot_ci=True, alpha_multiplier=0.1, diffline=0.23, rm=True):
@@ -122,6 +123,67 @@ def plot_qtl2(set_name, sample_high, sample_low, chrm, peakloc, diff, sd, startl
     PL.xlabel("Chr %s"%(chrnames[chrm]))
     if show:
         PL.show()
+
+
+def plot_qtl(posteriors, samples, chrm, peak, start, end, c_start, c_end, out_dir, screen=False, extension="png", dpi=300, skip_plot_ml=False, skip_plot_ci=False, genefile=None):
+    if screen: PL.rcParams.update(PLOT_PARAMS_SCREEN)
+    LOG.info("plot_twopanel_qtl - out_dir=%s, chrm=%s, start-csctart-peak-cend-end=%d %d %d %d %d, samples=%s, skip_plot_ml=%s, skip_plot_ci=%s, extension=%s, dpi=%d"%(out_dir, chrm, start, c_start, peak, c_end, end, str(samples), str(skip_plot_ml), str(skip_plot_ci), extension, dpi))
+    colours = 'bgryck'
+    if not os.path.exists(out_dir):
+        LOG.debug("plot_qtl - Output directory %s does not exist; creating."%out_dir)
+        os.system("mkdir -p %s"%out_dir)
+
+    PL.figure(None, [8,7])
+    for w,window in enumerate([200000, 20000]): # two window sizes - 200kb, and ~16 genes (or 20kb, if genes not given)
+        PL.subplot(2,1,w+1)
+        for s, sample in enumerate(samples):
+            col = colours[s%6]
+            if not skip_plot_ml: plot_qtl_ml(posteriors[sample][chrm]['L'], posteriors[sample][chrm]['ML'], col)
+            plot_qtl_af(posteriors[sample][chrm]['L'], posteriors[sample][chrm]['AF'], col)
+            if not skip_plot_ci: plot_qtl_ci(posteriors[sample][chrm]['L'], posteriors[sample][chrm]['AF'], posteriors[sample][chrm]['SD'], col)
+        PL.plot([-1e5,1e7], [0.5,0.5], 'k--', alpha=0.5)
+        PL.plot([peak, peak], [0,1], 'r--', alpha=0.5)
+        PL.plot([c_start, c_start], [0,1], 'k--', alpha=0.5)
+        PL.plot([c_end, c_end], [0,1], 'k--', alpha=0.5)
+        PL.ylim(0,1)
+        PL.yticks(SP.arange(0,1.01,0.2))
+        PL.ylabel("Reference allele frequency")
+        if (w == 1) and (genefile is not None):
+            PL.xlim(*plot_gene_boxes(genefile, chrm, peak, n_genes=16))
+            PL.ylim(-0.2,1)
+        else: PL.xlim(peak-window/2, peak+window/2)
+        PL.title(chrm)
+    PL.savefig("%s/%s_%d-%d.%s"%(out_dir, chrm, start, end, extension), dpi=dpi)
+
+
+def plot_gene_boxes(genefile, chrm, peak, n_genes=16, h=0.06, y=-0.1):
+    genes = read_genes(genefile)
+    if chrm not in genes:
+        LOG.error("QTL location chromosome %s not in the list of genes in file %s. Resorting to 20kb window."%(chrm, genefile))
+        return peak-10000, peak+10000
+    loc, name = genes[chrm]
+    
+    mids = loc.mean(axis=1)
+    I = SP.argsort(abs(mids - peak))
+    for j,i in enumerate(sorted(I[0:n_genes])):
+        x1, x2 = loc[i]
+        PL.fill([x1,x2,x2,x1], [y+h, y+h, y-h, y-h], lw=0.5, fill=True, color="k", alpha=0.3)
+        PL.text(mids[i], y - 0.02 + 0.03*((-1)**j), name[i], horizontalalignment='center', size=7, style="italic")
+    win_start, win_end = min(loc[I[0:n_genes]].min(), peak-5000), max(loc[I[0:n_genes]].max(), peak+5000) # at least 10kb window
+    PL.plot([win_start, win_end], [0,0], 'k-', alpha=0.1)
+    return win_start, win_end
+
+
+def read_genes(genefile):
+    res = {}
+    for l in file(genefile, 'r'):
+        if l[0] == "#": continue
+        chrm, start, stop, name = l.strip().split("\t")
+        if chrm not in res: res[chrm] = [],[]
+        res[chrm][0].append([int(start), int(stop)])
+        res[chrm][1].append(name)
+    for chrm in res: res[chrm] = SP.array(res[chrm][0]), res[chrm][1]
+    return res
 
 
 def plot_genes(chrm, start, end, y, h):

@@ -145,6 +145,7 @@ Options:
         -d INT    DPI (dots per inch); resolution [300]
         -m STR    plot dots for maximum likelihood estimates (raw data) [False]
         -s STR    plot with screen parameters instead of publication plot parameters [False]
+        -g STR    path to tab-delimited file of gene coordinates (chrm  start  end  name). If provided, genes will be displayed. [""]
 """
 
 USAGE_COMBINE_COUNTS = """Combine multiple count files.
@@ -296,6 +297,7 @@ def sqtl_plot_qtls():
     parser.add_option("-m", "--skip_ml_estimates", dest="skip_plot_ml", default=False)
     parser.add_option("-c", "--skip_confidence_intervals", dest="skip_plot_ci", default=False)
     parser.add_option("-s", "--screen", dest="screen", default=False)
+    parser.add_option("-g", "--genefile", dest="genefile", default=None)
     opts, args = parser.parse_args()
     if len(args) < 5:
         print USAGE_PLOT_QTLS
